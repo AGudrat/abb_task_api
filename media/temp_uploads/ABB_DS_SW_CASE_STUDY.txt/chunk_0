@@ -1,0 +1,40 @@
+﻿Data Extraction, Conversational AI, and Visualization
+This case study is designed to assess your technical skills and ability to build a data-driven application with conversational AI capabilities. You will be challenged to extract information, build a user interface, and integrate with OpenAI's language models.
+
+Project Overview:
+The goal of this project is to create a web application that can answer questions about ABB Bank based on information extracted from its official website. The application will leverage OpenAI's GPT model to provide contextually relevant answers to user inquiries.
+Technical Requirements:
+1. Web Scraping:
+o Develop a script to parse the official ABB website and extract all textual content.
+2. Web Application Development:
+o Build a web application with the following functionalities:
+§ Data Upload: Allow users to upload the extracted data and store it in the browser's local storage.
+§ OpenAI Integration:
+§ Implement a backend service that interacts with one of OpenAI LLM model.
+§ Format the extracted data into a suitable vector database format (framework of your choice) compatible with OpenAI's requirements.
+§ Conversational Interface:
+§ Upon successful data processing, display a chat interface where users can ask questions.
+§ Ensure questions are answered within the context of the provided ABB information.
+§ Implement microservice architecture for question handling and response generation using JSON format.
+§ Store questions, answers, and timestamps in a database.
+3. Data Visualization:
+o Utilize a charting library to visualize the stored questions and answers, providing insights into user interactions.
+4. Containerization:
+o Package the application and its dependencies into a Docker image for portability and easy deployment.
+Timeline:
+You have one week to complete this case study.
+Evaluation Criteria:
+Your submission will be evaluated based on the following factors:
+· Functionality: The application should meet the specified requirements and function as intended.
+· Code Quality: The code should be clean, well-structured, and easy to understand.
+· Efficiency: The application should be efficient in terms of resource utilization and response times.
+· Design: The user interface should be intuitive and user-friendly.
+· Documentation: The code should be well-documented, explaining the implementation choices and functionalities.
+Additional Notes:
+· Feel free to include any additional features or functionalities that enhance the user experience or demonstrate your skills.
+Output Format:
+· All codes related to case study should be shared with HR department within a given time interval.
+· Please be prepared for code walkthrough and demo session for your product with ABB Team at the defined meeting time.
+
+We are excited to see your solution and learn more about your technical abilities!
+
