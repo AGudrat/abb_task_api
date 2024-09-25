@@ -20,13 +20,72 @@ from rest_framework.generics import ListAPIView
 from .models import Session
 from .serializers import SessionSerializer,FileUploadSerializer, QuestionSerializer,InteractionSerializer
 from datetime import datetime
+from collections import Counter
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+import re
 load_dotenv()
 
+class LikeDislikeView(APIView):
+    @swagger_auto_schema(
+        operation_description="Like or dislike an AI response in a session",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'session_id': openapi.Schema(type=openapi.TYPE_STRING, description='Session ID'),
+                'message_index': openapi.Schema(type=openapi.TYPE_INTEGER, description='Index of the message in the conversation'),
+                'liked': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='Set to true to like or false to dislike the message'),
+            },
+            required=['session_id', 'message_index', 'liked'],
+        ),
+        responses={
+            200: openapi.Response(description="Status updated successfully"),
+            400: openapi.Response(description="Invalid data provided"),
+            404: openapi.Response(description="Session not found"),
+        }
+    )
+    def post(self, request, format=None):
+        session_id = request.data.get('session_id')
+        message_index = request.data.get('message_index')
+        liked = request.data.get('liked')
 
+        if session_id is None or message_index is None or liked is None:
+            return Response({'error': 'Invalid data provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = Session.objects.get(session_id=session_id)
+        except Session.DoesNotExist:
+            return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Retrieve conversation history
+        conversation = messages_from_dict(session.conversation_history)
+
+        # Check if the index is valid
+        if message_index < 0 or message_index >= len(conversation):
+            return Response({'error': 'Invalid message index'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find the message and update liked/disliked status
+        message = conversation[message_index]
+        if message.type == 'ai':
+            message.additional_kwargs['liked'] = liked
+
+            # Save the updated conversation back to the session
+            session.conversation_history = messages_to_dict(conversation)
+            session.save()
+
+            return Response({'message': 'Status updated successfully'}, status=status.HTTP_200_OK)
+
+        return Response({'error': 'Can only like/dislike AI messages'}, status=status.HTTP_400_BAD_REQUEST)
 class InteractionListView(APIView):
     def get(self, request, format=None):
         interactions = []
         sessions = Session.objects.all()
+        
+        # Data for tracking the additional features
+        question_lengths = []
+        word_counter = Counter()
+        interactions_over_time = sessions.annotate(date=TruncDate('created_at')).values('date').annotate(count=Count('session_id')).order_by('date')
+        liked_disliked_interactions = {'liked': [], 'disliked': []}
 
         for session in sessions:
             conversation = messages_from_dict(session.conversation_history)
@@ -35,6 +94,14 @@ class InteractionListView(APIView):
                     question = message.content
                     timestamp_str = message.additional_kwargs.get('timestamp')
                     timestamp = datetime.fromisoformat(timestamp_str) if timestamp_str else session.created_at
+                    
+                    # Update question length distribution
+                    question_length = len(question.split())
+                    question_lengths.append(question_length)
+                    
+                    # Count words for frequency analysis
+                    words = re.findall(r'\w+', question.lower())
+                    word_counter.update(words)
 
                     # Find the corresponding AI response
                     ai_response = None
@@ -42,17 +109,51 @@ class InteractionListView(APIView):
                         if next_msg.type == 'ai':
                             ai_response = next_msg
                             break
-
+                    
                     answer = ai_response.content if ai_response else ''
+
+                    # Track liked and disliked answers for the AI response
+                    if ai_response and 'liked' in ai_response.additional_kwargs:
+                        if ai_response.additional_kwargs['liked']:
+                            liked_disliked_interactions['liked'].append({
+                                'session_id': session.session_id,
+                                'question': question,
+                                'answer': answer,
+                                'timestamp': timestamp,
+                            })
+                        else:
+                            liked_disliked_interactions['disliked'].append({
+                                'session_id': session.session_id,
+                                'question': question,
+                                'answer': answer,
+                                'timestamp': timestamp,
+                            })
+
                     interactions.append({
                         'session_id': session.session_id,
                         'question': question,
                         'answer': answer,
                         'timestamp': timestamp,
                     })
+        
+        # Get the top 10 most frequent words
+        most_frequent_words = word_counter.most_common(10)
+        
+        # Prepare the response data
+        data = {
+            'interactions': interactions,
+            'interactions_over_time': list(interactions_over_time),
+            'question_length_distribution': {
+                'min': min(question_lengths) if question_lengths else 0,
+                'max': max(question_lengths) if question_lengths else 0,
+                'average': sum(question_lengths) / len(question_lengths) if question_lengths else 0
+            },
+            'top_10_most_frequent_words': most_frequent_words,
+            'liked_disliked_interactions': liked_disliked_interactions
+        }
 
-        serializer = InteractionSerializer(interactions, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(data, status=status.HTTP_200_OK)
+
 # View to list all sessions
 class SessionListView(ListAPIView):
     serializer_class = SessionSerializer
@@ -82,11 +183,33 @@ class SessionDetailView(APIView):
         except Session.DoesNotExist:
             return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Return the session details and conversation history
+        # Deserialize the conversation history from the session
+        conversation = messages_from_dict(session.conversation_history)
+        
+        # Create an updated conversation history response with "liked" status for AI messages
+        conversation_response = []
+        for idx, message in enumerate(conversation):
+            # Base message data
+            message_data = {
+                "id": idx,
+                "type": message.type,
+                "content": message.content,
+                "timestamp": message.additional_kwargs.get('timestamp', session.created_at.isoformat()),
+            }
+
+            # For AI messages, include the "liked" status
+            if message.type == 'ai':
+                message_data["liked"] = message.additional_kwargs.get('liked', None)  # True, False, or None
+
+            # Append to the response list
+            conversation_response.append(message_data)
+        
+        # Return the session details with the updated conversation history
         return Response({
             'session_id': str(session.session_id),
-            'conversation_history': session.conversation_history,
+            'conversation_history': conversation_response,
         }, status=status.HTTP_200_OK)
+
     @swagger_auto_schema(
         operation_description="Delete a session.",
         responses={
@@ -101,6 +224,7 @@ class SessionDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Session.DoesNotExist:
             return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
 file_param = openapi.Parameter(
     'file',
     openapi.IN_FORM,

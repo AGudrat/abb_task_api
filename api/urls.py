@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import FileUploadView, QuestionAnsweringView,SessionListView,SessionDetailView,InteractionListView
+from .views import FileUploadView,LikeDislikeView, QuestionAnsweringView,SessionListView,SessionDetailView,InteractionListView
 
 urlpatterns = [
     path('upload/', FileUploadView.as_view(), name='file-upload'),
@@ -7,4 +7,5 @@ urlpatterns = [
     path('sessions/', SessionListView.as_view(), name='session-list'),
     path('sessions/<uuid:session_id>/', SessionDetailView.as_view(), name='session-detail'),
     path('interactions/', InteractionListView.as_view(), name='interaction-list'),
+    path('like-dislike/', LikeDislikeView.as_view(), name='like-dislike'),
 ]
