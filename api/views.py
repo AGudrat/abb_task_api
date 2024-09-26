@@ -22,7 +22,6 @@ from .serializers import SessionSerializer,FileUploadSerializer, QuestionSeriali
 from datetime import datetime
 from collections import Counter
 from django.db.models import Count
-from django.db.models.functions import TruncDate
 import re
 load_dotenv()
 
@@ -76,6 +75,9 @@ class LikeDislikeView(APIView):
             return Response({'message': 'Status updated successfully'}, status=status.HTTP_200_OK)
 
         return Response({'error': 'Can only like/dislike AI messages'}, status=status.HTTP_400_BAD_REQUEST)
+
+from collections import defaultdict
+
 class InteractionListView(APIView):
     def get(self, request, format=None):
         interactions = []
@@ -84,8 +86,10 @@ class InteractionListView(APIView):
         # Data for tracking the additional features
         question_lengths = []
         word_counter = Counter()
-        interactions_over_time = sessions.annotate(date=TruncDate('created_at')).values('date').annotate(count=Count('session_id')).order_by('date')
-        liked_disliked_interactions = {'liked': [], 'disliked': []}
+        liked_disliked_interactions = {'liked': [], 'disliked': [], 'default': []}
+        
+        # Dictionary to track daily interactions
+        interactions_by_date = defaultdict(int)
 
         for session in sessions:
             conversation = messages_from_dict(session.conversation_history)
@@ -94,6 +98,10 @@ class InteractionListView(APIView):
                     question = message.content
                     timestamp_str = message.additional_kwargs.get('timestamp')
                     timestamp = datetime.fromisoformat(timestamp_str) if timestamp_str else session.created_at
+                    
+                    # Track interaction by date
+                    date_key = timestamp.date()
+                    interactions_by_date[date_key] += 1
                     
                     # Update question length distribution
                     question_length = len(question.split())
@@ -111,18 +119,26 @@ class InteractionListView(APIView):
                             break
                     
                     answer = ai_response.content if ai_response else ''
-
+                    
                     # Track liked and disliked answers for the AI response
-                    if ai_response and 'liked' in ai_response.additional_kwargs:
-                        if ai_response.additional_kwargs['liked']:
-                            liked_disliked_interactions['liked'].append({
-                                'session_id': session.session_id,
-                                'question': question,
-                                'answer': answer,
-                                'timestamp': timestamp,
-                            })
+                    if ai_response:
+                        if 'liked' in ai_response.additional_kwargs:
+                            if ai_response.additional_kwargs['liked']:
+                                liked_disliked_interactions['liked'].append({
+                                    'session_id': session.session_id,
+                                    'question': question,
+                                    'answer': answer,
+                                    'timestamp': timestamp,
+                                })
+                            else:
+                                liked_disliked_interactions['disliked'].append({
+                                    'session_id': session.session_id,
+                                    'question': question,
+                                    'answer': answer,
+                                    'timestamp': timestamp,
+                                })
                         else:
-                            liked_disliked_interactions['disliked'].append({
+                            liked_disliked_interactions['default'].append({
                                 'session_id': session.session_id,
                                 'question': question,
                                 'answer': answer,
@@ -135,14 +151,17 @@ class InteractionListView(APIView):
                         'answer': answer,
                         'timestamp': timestamp,
                     })
-        
+
+        # Convert interactions by date to a list sorted by date
+        interactions_over_time = [{'date': date, 'count': count} for date, count in sorted(interactions_by_date.items())]
+
         # Get the top 10 most frequent words
         most_frequent_words = word_counter.most_common(10)
         
         # Prepare the response data
         data = {
             'interactions': interactions,
-            'interactions_over_time': list(interactions_over_time),
+            'interactions_over_time': interactions_over_time,
             'question_length_distribution': {
                 'min': min(question_lengths) if question_lengths else 0,
                 'max': max(question_lengths) if question_lengths else 0,
@@ -297,7 +316,9 @@ class FileUploadView(APIView):
         # Initialize LangChain components
         prompt = PromptTemplate(
             input_variables=["text"],
-            template="Summarize the following text:\n\n{text}"
+            template="""Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.Always be kind and respectful in your responses.if the questions is about the greeting, just say "Hello" or "Hi" in azerbaijani language.Always answer the question in azerbaijani language.
+                Context:{context}
+                Question: {question}"""
         )
         llm = ChatOpenAI(openai_api_key=os.getenv('OPENAI_API_KEY'), model="gpt-4o-mini")
         chain = LLMChain(llm=llm, prompt=prompt)
@@ -369,7 +390,7 @@ class QuestionAnsweringView(APIView):
         if session.conversation_history:
             # Deserialize messages from stored dicts
             memory.chat_memory.messages = messages_from_dict(session.conversation_history)
-
+        
         # Create a conversation chain
         qa = ConversationalRetrievalChain.from_llm(
             llm=llm,
@@ -380,8 +401,6 @@ class QuestionAnsweringView(APIView):
         # Get the answer
         result = qa({"question": question})
 
-        # Update the conversation history in the session
-        # Serialize messages to store them in the database
         session.conversation_history = messages_to_dict(memory.chat_memory.messages)
         session.save()
 

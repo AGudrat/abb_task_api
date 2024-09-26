@@ -39,7 +39,7 @@ def scrape_text(request):
 
     visited_urls = set()
     text_elements = []
-    page_limit = 30  # Set the page limit to 20
+    page_limit = 30  # Set the page limit to 30
     page_count = 0  # Initialize page count
 
     def scrape_page(url):
