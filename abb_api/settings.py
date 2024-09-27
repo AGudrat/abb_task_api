@@ -77,18 +77,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'abb_api.wsgi.application'
 
-
+import dj_database_url
+import os
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
 DATABASES = {
-    'default':{
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'abb_api',
-        'USER': 'postgres',
-        'PASSWORD': 'pwd123$',
-        'HOST': 'localhost'
-    }
+    'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
 }
 
 
@@ -135,7 +130,6 @@ STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

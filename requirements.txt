@@ -1,0 +1,15 @@
+Django==3.2
+djangorestframework==3.12.4
+drf-yasg
+langchain
+openai
+faiss-cpu
+python-dotenv
+chardet
+beautifulsoup4
+django-cors-headers
+gunicorn
+psycopg2-binary
+dj-database-url
+langchain-community
+tiktoken
