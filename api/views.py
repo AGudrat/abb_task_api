@@ -118,7 +118,7 @@ class InteractionListView(APIView):
                             ai_response = next_msg
                             break
                     
-                    answer = ai_response.content if ai_response else ''
+                    answer = ai_response.content if ai_response else '' 
                     
                     # Track liked and disliked answers for the AI response
                     if ai_response:
@@ -315,7 +315,7 @@ class FileUploadView(APIView):
     def process_with_langchain(self, text):
         # Initialize LangChain components
         prompt = PromptTemplate(
-            input_variables=["text"],
+            input_variables=["context", "question"],
             template="""Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.Always be kind and respectful in your responses.if the questions is about the greeting, just say "Hello" or "Hi" in azerbaijani language.Always answer the question in azerbaijani language.
                 Context:{context}
                 Question: {question}"""
@@ -324,8 +324,11 @@ class FileUploadView(APIView):
         chain = LLMChain(llm=llm, prompt=prompt)
 
         # Process the text
-        summary = chain.run(text=text)
-        return summary
+        response = chain.run({
+            'context': text,  # Here you pass the text as context
+            'question': 'Text faylı nədən ibarətdir?'  # Replace this with a valid question
+        })
+        return response
 class TimestampedConversationBufferMemory(ConversationBufferMemory):
     def save_context(self, inputs, outputs):
         # Add timestamp to the human message

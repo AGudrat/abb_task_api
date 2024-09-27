@@ -101,4 +101,9 @@ def scrape_text(request):
         file.write(full_text)
     
     # Return a response with the filename
-    return Response({"message": "Text successfully scraped and written to file", "file": filename}, status=status.HTTP_200_OK)
+    return Response({
+    "message": "Text successfully scraped and written to file",
+    "file": filename,
+    "text": full_text  # Add this to return the scraped text
+}, status=status.HTTP_200_OK)
+
